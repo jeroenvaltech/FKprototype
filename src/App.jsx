@@ -28,6 +28,24 @@ const prescriptions = [
   { id: "V-1034", client: "Sara El Amrani", protocol: "Intake Herhaaltraject", status: "Wacht op consent", risk: "Hoog", updated: "2 dagen geleden" },
 ];
 
+const questionnaire = {
+  title: "PHQ-9 — stemming en welzijn",
+  intro: "Beantwoord per vraag hoe vaak je hier de afgelopen 2 weken last van had.",
+  questions: [
+    { id: "q1", text: "Weinig interesse of plezier in dingen doen" },
+    { id: "q2", text: "Je neerslachtig, somber of hopeloos voelen" },
+    { id: "q3", text: "Moeite met inslapen, doorslapen of juist te veel slapen" },
+    { id: "q4", text: "Weinig energie of je moe voelen" },
+    { id: "q5", text: "Slecht eten of juist te veel eten" },
+  ],
+  options: [
+    { value: 0, label: "Helemaal niet" },
+    { value: 1, label: "Enkele dagen" },
+    { value: 2, label: "Meer dan de helft van de dagen" },
+    { value: 3, label: "Bijna elke dag" },
+  ],
+};
+
 const surveys = [
   { id: "SV-201", name: "PHQ-9", status: "Actief", locale: "NL / EN", source: "PDF naar digitaal formulier" },
   { id: "SV-202", name: "GAD-7", status: "Draft", locale: "NL", source: "Handmatig opgebouwd" },
@@ -270,7 +288,102 @@ function StaffDashboard() {
   );
 }
 
+function ClientQuestionnaire() {
+  const [answers, setAnswers] = useState({});
+  const [step, setStep] = useState(0);
+  const total = questionnaire.questions.length;
+  const current = questionnaire.questions[step];
+  const progress = Math.round((Object.keys(answers).length / total) * 100);
+  const isComplete = Object.keys(answers).length === total;
+
+  function selectAnswer(value) {
+    setAnswers((prev) => ({ ...prev, [current.id]: value }));
+  }
+
+  function nextStep() {
+    if (step < total - 1) setStep((s) => s + 1);
+  }
+
+  function prevStep() {
+    if (step > 0) setStep((s) => s - 1);
+  }
+
+  const score = Object.values(answers).reduce((sum, value) => sum + Number(value || 0), 0);
+
+  return (
+    <div className="content">
+      <div className="card panel">
+        <SectionHeader title="Vragenlijst invullen" subtitle="Rustige, stapsgewijze ervaring voor cliënten" action={<span className="pill">{progress}% voltooid</span>} />
+        <div className="listItem selected" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 22 }}>{questionnaire.title}</div>
+          <div className="footerNote">{questionnaire.intro}</div>
+          <div className="progressWrap" style={{ marginTop: 14 }}><div className="progressBar" style={{ width: `${progress}%` }} /></div>
+        </div>
+
+        <div className="grid2" style={{ alignItems: "start" }}>
+          <div className="listItem">
+            <div className="small">Vraag {step + 1} van {total}</div>
+            <div style={{ fontWeight: 700, fontSize: 24, lineHeight: 1.3, marginTop: 8 }}>{current.text}</div>
+            <div className="list" style={{ marginTop: 18 }}>
+              {questionnaire.options.map((option) => {
+                const selected = answers[current.id] === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => selectAnswer(option.value)}
+                    className={`navItem ${selected ? "active" : ""}`}
+                    style={{
+                      border: selected ? "0" : "1px solid rgba(47,93,80,.12)",
+                      background: selected ? undefined : "white",
+                      color: selected ? undefined : "#1F2937",
+                      marginBottom: 0,
+                      padding: "16px 18px",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="tagRow" style={{ marginTop: 18 }}>
+              <Button secondary onClick={prevStep}>Vorige</Button>
+              <Button onClick={nextStep}>Volgende</Button>
+            </div>
+          </div>
+
+          <div className="list" style={{ gap: 14 }}>
+            <div className="listItem">
+              <div style={{ fontWeight: 700 }}>Jouw voortgang</div>
+              <div className="footerNote">Je kunt in een later stadium verdergaan waar je bent gebleven.</div>
+              <div className="progressWrap" style={{ marginTop: 14 }}><div className="progressBar" style={{ width: `${progress}%` }} /></div>
+            </div>
+            <div className="listItem">
+              <div style={{ fontWeight: 700 }}>Over deze vragenlijst</div>
+              <div className="footerNote">De antwoorden helpen je behandelaar om een beter beeld te krijgen van je huidige stemming en belasting.</div>
+            </div>
+            <div className="listItem">
+              <div style={{ fontWeight: 700 }}>Concept resultaat</div>
+              <div className="footerNote">Huidige score: {score}</div>
+              <div className="footerNote">Status: {isComplete ? "Klaar om te verzenden" : "Nog niet compleet"}</div>
+              <div className="tagRow" style={{ marginTop: 12 }}>
+                <Button secondary>Opslaan voor later</Button>
+                <Button>Verzenden</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClientPortal() {
+  const [view, setView] = useState("overview");
+
+  if (view === "questionnaire") {
+    return <ClientQuestionnaire />;
+  }
+
   return (
     <div className="content">
       <MetricGrid items={[
@@ -293,7 +406,7 @@ function ClientPortal() {
               </div>
               <div className="progressWrap"><div className="progressBar" style={{ width: index === 0 ? "58%" : "100%" }} /></div>
               <div className="tagRow" style={{ marginTop: 12 }}>
-                <Button>Openen</Button>
+                <Button onClick={() => setView("questionnaire")}>Open vragenlijst</Button>
                 <Button secondary>Meer info</Button>
               </div>
             </div>
