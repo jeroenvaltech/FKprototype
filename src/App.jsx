@@ -28,6 +28,17 @@ const prescriptions = [
   { id: "V-1034", client: "Sara El Amrani", protocol: "Intake Herhaaltraject", status: "Wacht op consent", risk: "Hoog", updated: "2 dagen geleden" },
 ];
 
+const openQuestionnaire = {
+  title: "Open intakegesprek met digitale assistent",
+  intro: "Beantwoord in je eigen woorden. De assistent helpt door rustig door te vragen.",
+  prompts: [
+    "Kun je vertellen waar je op dit moment het meest mee worstelt?",
+    "Wanneer merk je dat deze klachten het sterkst aanwezig zijn?",
+    "Wat heb je zelf al geprobeerd om hiermee om te gaan?",
+    "Is er iets waar je behandelaar extra rekening mee moet houden?",
+  ],
+};
+
 const questionnaire = {
   title: "PHQ-9 — stemming en welzijn",
   intro: "Beantwoord per vraag hoe vaak je hier de afgelopen 2 weken last van had.",
@@ -289,8 +300,22 @@ function StaffDashboard() {
 }
 
 function ClientQuestionnaire() {
+  const [mode, setMode] = useState("closed");
   const [answers, setAnswers] = useState({});
   const [step, setStep] = useState(0);
+  const [messages, setMessages] = useState([
+    {
+      sender: "bot",
+      text: "Welkom. Ik stel je een paar open vragen om je behandelaar alvast context te geven.",
+    },
+    {
+      sender: "bot",
+      text: openQuestionnaire.prompts[0],
+    },
+  ]);
+  const [draft, setDraft] = useState("");
+  const [openStep, setOpenStep] = useState(0);
+
   const total = questionnaire.questions.length;
   const current = questionnaire.questions[step];
   const progress = Math.round((Object.keys(answers).length / total) * 100);
@@ -308,70 +333,167 @@ function ClientQuestionnaire() {
     if (step > 0) setStep((s) => s - 1);
   }
 
+  function sendOpenAnswer() {
+    const text = draft.trim();
+    if (!text) return;
+
+    const nextMessages = [...messages, { sender: "user", text }];
+    const nextPromptIndex = openStep + 1;
+
+    if (nextPromptIndex < openQuestionnaire.prompts.length) {
+      nextMessages.push({ sender: "bot", text: openQuestionnaire.prompts[nextPromptIndex] });
+    } else {
+      nextMessages.push({
+        sender: "bot",
+        text: "Dank je. Je antwoorden zijn opgeslagen als concept voor je behandelaar. Je kunt dit gesprek later nog aanvullen.",
+      });
+    }
+
+    setMessages(nextMessages);
+    setDraft("");
+    if (nextPromptIndex < openQuestionnaire.prompts.length) {
+      setOpenStep(nextPromptIndex);
+    }
+  }
+
   const score = Object.values(answers).reduce((sum, value) => sum + Number(value || 0), 0);
 
   return (
     <div className="content">
       <div className="card panel">
-        <SectionHeader title="Vragenlijst invullen" subtitle="Rustige, stapsgewijze ervaring voor cliënten" action={<span className="pill">{progress}% voltooid</span>} />
-        <div className="listItem selected" style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 800, fontSize: 22 }}>{questionnaire.title}</div>
-          <div className="footerNote">{questionnaire.intro}</div>
-          <div className="progressWrap" style={{ marginTop: 14 }}><div className="progressBar" style={{ width: `${progress}%` }} /></div>
-        </div>
-
-        <div className="grid2" style={{ alignItems: "start" }}>
-          <div className="listItem">
-            <div className="small">Vraag {step + 1} van {total}</div>
-            <div style={{ fontWeight: 700, fontSize: 24, lineHeight: 1.3, marginTop: 8 }}>{current.text}</div>
-            <div className="list" style={{ marginTop: 18 }}>
-              {questionnaire.options.map((option) => {
-                const selected = answers[current.id] === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => selectAnswer(option.value)}
-                    className={`navItem ${selected ? "active" : ""}`}
-                    style={{
-                      border: selected ? "0" : "1px solid rgba(47,93,80,.12)",
-                      background: selected ? undefined : "white",
-                      color: selected ? undefined : "#1F2937",
-                      marginBottom: 0,
-                      padding: "16px 18px",
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
+        <SectionHeader
+          title="Vragenlijst invullen"
+          subtitle="Gesloten en open vragen in een rustige cliëntflow"
+          action={
+            <div className="tagRow">
+              <Button secondary onClick={() => setMode("closed")}>Meerkeuze</Button>
+              <Button onClick={() => setMode("open")}>Open gesprek</Button>
             </div>
-            <div className="tagRow" style={{ marginTop: 18 }}>
-              <Button secondary onClick={prevStep}>Vorige</Button>
-              <Button onClick={nextStep}>Volgende</Button>
-            </div>
-          </div>
+          }
+        />
 
-          <div className="list" style={{ gap: 14 }}>
-            <div className="listItem">
-              <div style={{ fontWeight: 700 }}>Jouw voortgang</div>
-              <div className="footerNote">Je kunt in een later stadium verdergaan waar je bent gebleven.</div>
+        {mode === "closed" ? (
+          <>
+            <div className="listItem selected" style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{questionnaire.title}</div>
+              <div className="footerNote">{questionnaire.intro}</div>
               <div className="progressWrap" style={{ marginTop: 14 }}><div className="progressBar" style={{ width: `${progress}%` }} /></div>
             </div>
-            <div className="listItem">
-              <div style={{ fontWeight: 700 }}>Over deze vragenlijst</div>
-              <div className="footerNote">De antwoorden helpen je behandelaar om een beter beeld te krijgen van je huidige stemming en belasting.</div>
-            </div>
-            <div className="listItem">
-              <div style={{ fontWeight: 700 }}>Concept resultaat</div>
-              <div className="footerNote">Huidige score: {score}</div>
-              <div className="footerNote">Status: {isComplete ? "Klaar om te verzenden" : "Nog niet compleet"}</div>
-              <div className="tagRow" style={{ marginTop: 12 }}>
-                <Button secondary>Opslaan voor later</Button>
-                <Button>Verzenden</Button>
+
+            <div className="grid2" style={{ alignItems: "start" }}>
+              <div className="listItem">
+                <div className="small">Vraag {step + 1} van {total}</div>
+                <div style={{ fontWeight: 700, fontSize: 24, lineHeight: 1.3, marginTop: 8 }}>{current.text}</div>
+                <div className="list" style={{ marginTop: 18 }}>
+                  {questionnaire.options.map((option) => {
+                    const selected = answers[current.id] === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => selectAnswer(option.value)}
+                        className={`navItem ${selected ? "active" : ""}`}
+                        style={{
+                          border: selected ? "0" : "1px solid rgba(47,93,80,.12)",
+                          background: selected ? undefined : "white",
+                          color: selected ? undefined : "#1F2937",
+                          marginBottom: 0,
+                          padding: "16px 18px",
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="tagRow" style={{ marginTop: 18 }}>
+                  <Button secondary onClick={prevStep}>Vorige</Button>
+                  <Button onClick={nextStep}>Volgende</Button>
+                </div>
+              </div>
+
+              <div className="list" style={{ gap: 14 }}>
+                <div className="listItem">
+                  <div style={{ fontWeight: 700 }}>Jouw voortgang</div>
+                  <div className="footerNote">Je kunt in een later stadium verdergaan waar je bent gebleven.</div>
+                  <div className="progressWrap" style={{ marginTop: 14 }}><div className="progressBar" style={{ width: `${progress}%` }} /></div>
+                </div>
+                <div className="listItem">
+                  <div style={{ fontWeight: 700 }}>Over deze vragenlijst</div>
+                  <div className="footerNote">De antwoorden helpen je behandelaar om een beter beeld te krijgen van je huidige stemming en belasting.</div>
+                </div>
+                <div className="listItem">
+                  <div style={{ fontWeight: 700 }}>Concept resultaat</div>
+                  <div className="footerNote">Huidige score: {score}</div>
+                  <div className="footerNote">Status: {isComplete ? "Klaar om te verzenden" : "Nog niet compleet"}</div>
+                  <div className="tagRow" style={{ marginTop: 12 }}>
+                    <Button secondary>Opslaan voor later</Button>
+                    <Button>Verzenden</Button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="listItem selected" style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{openQuestionnaire.title}</div>
+              <div className="footerNote">{openQuestionnaire.intro}</div>
+            </div>
+
+            <div className="grid2" style={{ alignItems: "start" }}>
+              <div className="listItem" style={{ minHeight: 520, display: "flex", flexDirection: "column" }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Gesprek met digitale assistent</div>
+                <div style={{ display: "grid", gap: 12, flex: 1 }}>
+                  {messages.map((message, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        justifySelf: message.sender === "user" ? "end" : "start",
+                        maxWidth: "85%",
+                        padding: "14px 16px",
+                        borderRadius: 18,
+                        background: message.sender === "user" ? "#2F5D50" : "#EDF6F0",
+                        color: message.sender === "user" ? "white" : "#1F2937",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {message.text}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <textarea
+                    className="textarea"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="Typ hier je antwoord..."
+                    style={{ minHeight: 120 }}
+                  />
+                  <div className="tagRow" style={{ marginTop: 12 }}>
+                    <Button secondary>Opslaan als concept</Button>
+                    <Button onClick={sendOpenAnswer}>Verstuur antwoord</Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="list" style={{ gap: 14 }}>
+                <div className="listItem">
+                  <div style={{ fontWeight: 700 }}>Hoe dit werkt</div>
+                  <div className="footerNote">De assistent stelt open intakevragen. Je antwoorden worden opgeslagen als concepttekst voor je behandelaar.</div>
+                </div>
+                <div className="listItem">
+                  <div style={{ fontWeight: 700 }}>Waarom open vragen?</div>
+                  <div className="footerNote">Open tekst geeft meer context over klachten, triggers en hulpvraag dan alleen een score of keuzelijst.</div>
+                </div>
+                <div className="listItem">
+                  <div style={{ fontWeight: 700 }}>Status</div>
+                  <div className="footerNote">Beantwoorde open vragen: {Math.min(openStep + (messages.some((m) => m.sender === "user") ? 1 : 0), openQuestionnaire.prompts.length)} / {openQuestionnaire.prompts.length}</div>
+                  <div className="footerNote">Je kunt het gesprek later verder afmaken.</div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
